@@ -15,7 +15,7 @@ Usage
         --output-dir ./eval_out
 
 Testset format (JSONL, one JSON object per line):
-    {"qid": "q1", "question": "Wie beantrage ich Urlaub?", "expected_doc_ids": ["doc:123"]}
+    {"qid": "q1", "question": "Wie beantrage ich Urlaub?", "expected_semantic_identifiers": ["doc:123"]}
 
 Output
 ------
@@ -45,7 +45,7 @@ import requests
 class TestCase:
     qid: str
     question: str
-    expected_doc_ids: list[str]
+    expected_semantic_identifiers: list[str]
 
 
 @dataclass
@@ -61,7 +61,7 @@ class RetrievedDoc:
 class QueryResult:
     qid: str
     question: str
-    expected_doc_ids: list[str]
+    expected_semantic_identifiers: list[str]
     retrieved: list[RetrievedDoc]
     # per-query metrics (filled in after retrieval)
     precision_at_k: float = 0.0
@@ -123,7 +123,7 @@ def search(
 
 
 def precision_at_k(retrieved: list[RetrievedDoc], expected: set[str], k: int) -> float:
-    top = [d.doc_id for d in retrieved[:k]]
+    top = [d.semantic_identifier for d in retrieved[:k]]
     return sum(1 for d in top if d in expected) / k if k else 0.0
 
 
@@ -132,20 +132,20 @@ def recall_at_k(
 ) -> float | None:
     if not expected:
         return None
-    top = [d.doc_id for d in retrieved[:k]]
+    top = [d.semantic_identifier for d in retrieved[:k]]
     return sum(1 for d in top if d in expected) / len(expected)
 
 
 def reciprocal_rank(retrieved: list[RetrievedDoc], expected: set[str]) -> float:
     for i, d in enumerate(retrieved, 1):
-        if d.doc_id in expected:
+        if d.semantic_identifier in expected:
             return 1.0 / i
     return 0.0
 
 
 def first_hit(retrieved: list[RetrievedDoc], expected: set[str]) -> int | None:
     for i, d in enumerate(retrieved, 1):
-        if d.doc_id in expected:
+        if d.semantic_identifier in expected:
             return i
     return None
 
@@ -168,7 +168,7 @@ def load_testset(path: Path) -> list[TestCase]:
                     TestCase(
                         qid=obj["qid"],
                         question=obj["question"],
-                        expected_doc_ids=obj["expected_doc_ids"],
+                        expected_semantic_identifiers=obj["expected_semantic_identifiers"],
                     )
                 )
             except (json.JSONDecodeError, KeyError) as e:
@@ -201,7 +201,7 @@ def write_csv(results: list[QueryResult], k: int, path: Path) -> None:
         writer.writerow([])
         # per-query breakdown
         writer.writerow(
-            ["qid", "question", f"P@{k}", f"R@{k}", "RR", "first_hit_rank", "expected_doc_ids"]
+            ["qid", "question", f"P@{k}", f"R@{k}", "RR", "first_hit_rank", "expected_semantic_identifiers"]
         )
         for r in results:
             writer.writerow(
@@ -212,7 +212,7 @@ def write_csv(results: list[QueryResult], k: int, path: Path) -> None:
                     f"{r.recall_at_k:.4f}" if r.recall_at_k is not None else "",
                     f"{r.reciprocal_rank:.4f}",
                     r.first_hit_rank if r.first_hit_rank is not None else "",
-                    "|".join(r.expected_doc_ids),
+                    "|".join(r.expected_semantic_identifiers),
                 ]
             )
 
@@ -231,7 +231,7 @@ def parse_args() -> argparse.Namespace:
         "--testset",
         type=Path,
         required=True,
-        help="Path to JSONL test set (fields: qid, question, expected_doc_ids).",
+        help="Path to JSONL test set (fields: qid, question, expected_semantic_identifiers).",
     )
     parser.add_argument(
         "--endpoint",
@@ -287,12 +287,12 @@ def main() -> None:
             print(f"ERROR: {e} — skipping")
             continue
 
-        expected = set(case.expected_doc_ids)
+        expected = set(case.expected_semantic_identifiers)
         k = args.top_k
         qr = QueryResult(
             qid=case.qid,
             question=case.question,
-            expected_doc_ids=case.expected_doc_ids,
+            expected_semantic_identifiers=case.expected_semantic_identifiers,
             retrieved=retrieved,
             precision_at_k=precision_at_k(retrieved, expected, k),
             recall_at_k=recall_at_k(retrieved, expected, k),
