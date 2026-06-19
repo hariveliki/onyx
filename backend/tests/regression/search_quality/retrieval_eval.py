@@ -81,14 +81,21 @@ def search(
     base_url: str,
     api_key: str,
     top_k: int,
+    document_sets: list[str] | None = None,
+    source_types: list[str] | None = None,
 ) -> list[RetrievedDoc]:
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
     }
+    filters: dict[str, object] = {}
+    if document_sets:
+        filters["document_set"] = document_sets
+    if source_types:
+        filters["source_type"] = source_types
     payload = {
         "search_query": question,
-        "filters": {},
+        "filters": filters,
         "num_docs_fed_to_llm_selection": top_k,
         "num_hits": top_k,
         "run_query_expansion": False,
@@ -255,6 +262,22 @@ def parse_args() -> argparse.Namespace:
         default=Path("eval_out"),
         help="Directory to write retrieval_results.jsonl and summary.csv.",
     )
+    parser.add_argument(
+        "--document-sets",
+        nargs="+",
+        metavar="NAME",
+        default=None,
+        help="Restrict retrieval to these document set names (space-separated). "
+        "Example: --document-sets Wiki SharePoint",
+    )
+    parser.add_argument(
+        "--source-types",
+        nargs="+",
+        metavar="TYPE",
+        default=None,
+        help="Restrict retrieval to these source types (space-separated). "
+        "Example: --source-types confluence sharepoint",
+    )
     return parser.parse_args()
 
 
@@ -279,6 +302,8 @@ def main() -> None:
                 base_url=args.endpoint,
                 api_key=args.api_key,
                 top_k=args.top_k,
+                document_sets=args.document_sets,
+                source_types=args.source_types,
             )
         except requests.HTTPError as e:
             print(f"HTTP {e.response.status_code} — skipping")
